@@ -146,15 +146,15 @@ public class StreamingRsvpsDStream {
 
     public static Put rSVPDataToPut(RSVP rsvp) {
         final Put put = new Put(Bytes.toBytes(rsvp.getId()));
-        put.addColumn(CF_BASIC_INFO, C_ID, Bytes.toBytes(rsvp.getId()));
+        addStringColumn(put,CF_BASIC_INFO, C_ID, String.valueOf(rsvp.getId()));
         addStringColumn(put,CF_BASIC_INFO, C_VISIBILITY, rsvp.getVisibility());
         addStringColumn(put,CF_BASIC_INFO, C_RESPONSE, rsvp.getResponse());
-        put.addColumn(CF_BASIC_INFO, C_GUESTS, Bytes.toBytes(rsvp.getGuests()));
+        addStringColumn(put,CF_BASIC_INFO, C_GUESTS, String.valueOf(rsvp.getGuests()));
         addStringColumn(put,CF_BASIC_INFO, C_MTIME, rsvp.getMtime());
         addStringColumn(put,CF_VENUE, C_VENUE_ID, rsvp.getVenueId());
         addStringColumn(put,CF_VENUE, C_VENUE_NAME, rsvp.getVenueName());
-        put.addColumn(CF_VENUE, C_LON, Bytes.toBytes(rsvp.getVenueLon()));
-        put.addColumn(CF_VENUE, C_LAT, Bytes.toBytes(rsvp.getVenueLat()));
+        addStringColumn(put,CF_VENUE, C_LON, String.valueOf(rsvp.getVenueLon()));
+        addStringColumn(put,CF_VENUE, C_LAT, String.valueOf(rsvp.getVenueLat()));
         addStringColumn(put,CF_MEMBER, C_MEM_ID, rsvp.getMemId());
         addStringColumn(put,CF_MEMBER, C_MEM_NAME, rsvp.getMemName());
         addStringColumn(put,CF_EVENT, C_EVENT_ID, rsvp.getEventId());
@@ -164,8 +164,8 @@ public class StreamingRsvpsDStream {
         addStringColumn(put,CF_GROUP, C_GROUP_ID, rsvp.getGroupId());
         addStringColumn(put,CF_GROUP, C_G_NAME, rsvp.getGroupName());
         addStringColumn(put,CF_GROUP, C_TOPICS, rsvp.getGroupTopics());
-        put.addColumn(CF_GROUP, C_G_LAT, Bytes.toBytes(rsvp.getGroupLat()));
-        put.addColumn(CF_GROUP, C_G_LON, Bytes.toBytes(rsvp.getGroupLon()));
+        addStringColumn(put,CF_GROUP, C_G_LAT, String.valueOf(rsvp.getGroupLat()));
+        addStringColumn(put,CF_GROUP, C_G_LON, String.valueOf(rsvp.getGroupLon()));
         addStringColumn(put,CF_GROUP, C_CITY, rsvp.getGroupCity());
         addStringColumn(put,CF_GROUP, C_COUNTRY, rsvp.getGroupCountry());
         addStringColumn(put,CF_GROUP, C_STATE, rsvp.getGroupState());
@@ -244,7 +244,7 @@ public class StreamingRsvpsDStream {
 
             rsvp.setMtime(obj.optString("mtime"));
             rsvp.setResponse(obj.optString("response"));
-            rsvp.setGuests(obj.optInt("guests"));
+            rsvp.setGuests(Integer.parseInt(obj.optString("guests","0")));
             rsvp.setVisibility(obj.optString("visibility"));
            return rsvp;
         }
