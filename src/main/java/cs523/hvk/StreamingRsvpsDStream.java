@@ -1,11 +1,8 @@
 package cs523.hvk;
 
 import java.io.IOException;
-import java.time.LocalTime;
+import java.time.Instant;
 import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -14,15 +11,9 @@ import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapred.TableOutputFormat;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.clients.consumer.OffsetCommitCallback;
-import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.spark.SparkConf;
 import org.apache.spark.streaming.Duration;
@@ -52,7 +43,35 @@ public class StreamingRsvpsDStream {
 
     private static String TABLE_NAME = "rsvps";
     private static final byte[] CF_BASIC_INFO = Bytes.toBytes("basic_info");
+    private static final byte[] CF_VENUE = Bytes.toBytes("venue");
+    private static final byte[] CF_MEMBER = Bytes.toBytes("member");
+    private static final byte[] CF_EVENT = Bytes.toBytes("event");
+    private static final byte[] CF_GROUP = Bytes.toBytes("group");
+
     private static final byte[] C_ID = Bytes.toBytes("id");
+    private static final byte[] C_MTIME = Bytes.toBytes("mtime");
+    private static final byte[] C_VISIBILITY = Bytes.toBytes("visibility");
+    private static final byte[] C_RESPONSE = Bytes.toBytes("response");
+    private static final byte[] C_GUESTS = Bytes.toBytes("guests");
+    private static final byte[] C_VENUE_NAME = Bytes.toBytes("name");
+    private static final byte[] C_LON = Bytes.toBytes("lon");
+    private static final byte[] C_LAT = Bytes.toBytes("lat");
+    private static final byte[] C_VENUE_ID = Bytes.toBytes("id");
+    private static final byte[] C_EVENT_NAME = Bytes.toBytes("name");
+    private static final byte[] C_EVENT_ID = Bytes.toBytes("id");
+    private static final byte[] C_EVENT_TIME = Bytes.toBytes("time");
+    private static final byte[] C_EVENT_URL = Bytes.toBytes("url");
+    private static final byte[] C_MEM_ID = Bytes.toBytes("id");
+    private static final byte[] C_MEM_NAME = Bytes.toBytes("name");
+    private static final byte[] C_TOPICS = Bytes.toBytes("topics");
+    private static final byte[] C_CITY = Bytes.toBytes("city");
+    private static final byte[] C_COUNTRY = Bytes.toBytes("country");
+    private static final byte[] C_STATE = Bytes.toBytes("state");
+    private static final byte[] C_GROUP_ID = Bytes.toBytes("id");
+    private static final byte[] C_G_NAME = Bytes.toBytes("name");
+    private static final byte[] C_G_LON = Bytes.toBytes("lon");
+    private static final byte[] C_G_LAT = Bytes.toBytes("lat");
+
     private static final Collection<String> TOPICS =
                 Collections.unmodifiableList(Arrays.asList(KAFKA_TOPIC));
 
@@ -84,112 +103,20 @@ public class StreamingRsvpsDStream {
         final JavaStreamingContext streamingContext
                 = new JavaStreamingContext(conf, new Duration(BATCH_DURATION_INTERVAL_MS));
 
-            Admin admin = connection.getAdmin();
-            final ColumnFamilyDescriptor infoColumnFamily = ColumnFamilyDescriptorBuilder.newBuilder(CF_BASIC_INFO).build();
-            final TableDescriptor table = TableDescriptorBuilder.newBuilder(TableName.valueOf(TABLE_NAME))
-                    .setColumnFamilies(Arrays.asList(infoColumnFamily)).build();
+        Admin admin = connection.getAdmin();
+        final ColumnFamilyDescriptor infoColumnFamily = ColumnFamilyDescriptorBuilder.newBuilder(CF_BASIC_INFO).build();
+        final ColumnFamilyDescriptor venueColumnFamily = ColumnFamilyDescriptorBuilder.newBuilder(CF_VENUE).build();
+        final ColumnFamilyDescriptor memberColumnFamily = ColumnFamilyDescriptorBuilder.newBuilder(CF_MEMBER).build();
+        final ColumnFamilyDescriptor eventColumnFamily = ColumnFamilyDescriptorBuilder.newBuilder(CF_EVENT).build();
+        final ColumnFamilyDescriptor groupColumnFamily = ColumnFamilyDescriptorBuilder.newBuilder(CF_GROUP).build();
+        final TableDescriptor table = TableDescriptorBuilder.newBuilder(TableName.valueOf(TABLE_NAME))
+                .setColumnFamilies(Arrays.asList(infoColumnFamily,venueColumnFamily,memberColumnFamily,eventColumnFamily,groupColumnFamily)).build();
 
-            if (admin.tableExists(table.getTableName())) {
-                admin.disableTable(table.getTableName());
-                admin.deleteTable(table.getTableName());
-            }
-            admin.createTable(table);
-
-//        {
-//            "venue": {
-//            "venue_name": "Online event",
-//                    "lon": 179.1962,
-//                    "lat": -8.521147,
-//                    "venue_id": 26906060
-//        },
-//            "visibility": "public",
-//                "response": "yes",
-//                "guests": 0,
-//                "member": {
-//            "member_id": 337451013,
-//                    "photo": "https://secure.meetupstatic.com/photos/member/e/7/e/1/thumb_308939361.jpeg",
-//                    "member_name": "Ms. S"
-//        },
-//            "rsvp_id": 1901706362,
-//                "mtime": 1643260471792,
-//                "event": {
-//            "event_name": "Learn how to stop inadvertently amplifying your painful emotions and sensations",
-//                    "event_id": "283073187",
-//                    "time": 1643741100000,
-//                    "event_url": "https://www.meetup.com/evidence-based-self-help/events/283073187/"
-//        },
-//            "group": {
-//            "group_topics": [
-//            {
-//                "urlkey": "understanding-yourself",
-//                    "topic_name": "Understanding Yourself"
-//            },
-//            {
-//                "urlkey": "you-can-heal-your-life",
-//                    "topic_name": "You Can Heal Your Life"
-//            },
-//            {
-//                "urlkey": "help-each-other-experience-growth",
-//                    "topic_name": "Help Each Other Experience Growth"
-//            },
-//            {
-//                "urlkey": "mental-illness-young-adults",
-//                    "topic_name": "Mental Illness & Young Adults"
-//            },
-//            {
-//                "urlkey": "self-awareness-workshops",
-//                    "topic_name": "Self awareness workshops"
-//            },
-//            {
-//                "urlkey": "self-empowerment-and-action",
-//                    "topic_name": "Self Empowerment and Action"
-//            },
-//            {
-//                "urlkey": "social-psychology",
-//                    "topic_name": "Social Psychology"
-//            },
-//            {
-//                "urlkey": "finding-happiness",
-//                    "topic_name": "Finding Happiness"
-//            },
-//            {
-//                "urlkey": "social-phobia",
-//                    "topic_name": "Social Phobia"
-//            },
-//            {
-//                "urlkey": "generalized-anxiety-disorder",
-//                    "topic_name": "Generalized Anxiety Disorder"
-//            },
-//            {
-//                "urlkey": "depression",
-//                    "topic_name": "Depression"
-//            },
-//            {
-//                "urlkey": "self-help-techniques-for-dealing-with-anxiety",
-//                    "topic_name": "Self Help Techniques for Dealing with Anxiety"
-//            },
-//            {
-//                "urlkey": "space-clearing-sacred-space",
-//                    "topic_name": "Space Clearing & Sacred Space"
-//            },
-//            {
-//                "urlkey": "higher-self",
-//                    "topic_name": "Higher Self"
-//            },
-//            {
-//                "urlkey": "resources-for-adhd",
-//                    "topic_name": "Resources for ADHD"
-//            }
-//    ],
-//            "group_city": "London",
-//                    "group_country": "gb",
-//                    "group_id": 34976561,
-//                    "group_name": "Evidence-Based Self-Help for Anxiety, Depression, ADHD, OCD",
-//                    "group_lon": -0.18,
-//                    "group_urlname": "evidence-based-self-help",
-//                    "group_lat": 51.49
-//        }
-//        }
+        if (admin.tableExists(table.getTableName())) {
+            admin.disableTable(table.getTableName());
+            admin.deleteTable(table.getTableName());
+        }
+        admin.createTable(table);
 
         final JavaInputDStream<ConsumerRecord<String, String>> meetupStream =
                 KafkaUtils.createDirectStream(
@@ -199,7 +126,6 @@ public class StreamingRsvpsDStream {
                 );
 
         JavaPairDStream<ImmutableBytesWritable, Put> data = meetupStream
-//                .filter(f -> !f.value().contains("\"guests\":0"))
                 .map(ConsumerRecord::value)
                 .map(Parser::parse)
                 .filter(Objects::nonNull)
@@ -219,34 +145,303 @@ public class StreamingRsvpsDStream {
     }
 
     public static Put rSVPDataToPut(RSVP rsvp) {
-        final Put put = new Put(Bytes.toBytes(rsvp.getDateTime()));
+        final Put put = new Put(Bytes.toBytes(rsvp.getId()));
         put.addColumn(CF_BASIC_INFO, C_ID, Bytes.toBytes(rsvp.getId()));
+        addStringColumn(put,CF_BASIC_INFO, C_VISIBILITY, rsvp.getVisibility());
+        addStringColumn(put,CF_BASIC_INFO, C_RESPONSE, rsvp.getResponse());
+        put.addColumn(CF_BASIC_INFO, C_GUESTS, Bytes.toBytes(rsvp.getGuests()));
+        addStringColumn(put,CF_BASIC_INFO, C_MTIME, rsvp.getMtime());
+        addStringColumn(put,CF_VENUE, C_VENUE_ID, rsvp.getVenueId());
+        addStringColumn(put,CF_VENUE, C_VENUE_NAME, rsvp.getVenueName());
+        put.addColumn(CF_VENUE, C_LON, Bytes.toBytes(rsvp.getVenueLon()));
+        put.addColumn(CF_VENUE, C_LAT, Bytes.toBytes(rsvp.getVenueLat()));
+        addStringColumn(put,CF_MEMBER, C_MEM_ID, rsvp.getMemId());
+        addStringColumn(put,CF_MEMBER, C_MEM_NAME, rsvp.getMemName());
+        addStringColumn(put,CF_EVENT, C_EVENT_ID, rsvp.getEventId());
+        addStringColumn(put,CF_EVENT, C_EVENT_NAME, rsvp.getEventName());
+        addStringColumn(put,CF_EVENT, C_EVENT_TIME, rsvp.getEventTime());
+        addStringColumn(put,CF_EVENT, C_EVENT_URL, rsvp.getEventURL());
+        addStringColumn(put,CF_GROUP, C_GROUP_ID, rsvp.getGroupId());
+        addStringColumn(put,CF_GROUP, C_G_NAME, rsvp.getGroupName());
+        addStringColumn(put,CF_GROUP, C_TOPICS, rsvp.getGroupTopics());
+        put.addColumn(CF_GROUP, C_G_LAT, Bytes.toBytes(rsvp.getGroupLat()));
+        put.addColumn(CF_GROUP, C_G_LON, Bytes.toBytes(rsvp.getGroupLon()));
+        addStringColumn(put,CF_GROUP, C_CITY, rsvp.getGroupCity());
+        addStringColumn(put,CF_GROUP, C_COUNTRY, rsvp.getGroupCountry());
+        addStringColumn(put,CF_GROUP, C_STATE, rsvp.getGroupState());
         return put;
+    }
+
+    public static void addStringColumn(Put put, byte[] cfColumn, byte[] column, String value){
+        if(value != null) put.addColumn(cfColumn, column, Bytes.toBytes(value));
     }
 
     public static class Parser {
         public static RSVP parse(String s) {
             JSONObject obj = new JSONObject(s);
-            return new RSVP(obj.getInt("rsvp_id"), obj.getLong("mtime"));
+            RSVP rsvp = new RSVP(obj.getString("rsvp_id"));
+
+            if(obj.has("event")){
+                JSONObject event = obj.getJSONObject("event");
+                String eventName = event.optString("event_name");
+                String eventId = event.optString("event_id");
+                String eventTime = event.optString("time");
+                String eventURL = event.optString("event_url");
+
+                rsvp.setEventId(eventId);
+                rsvp.setEventName(eventName);
+                rsvp.setEventTime(eventTime);
+                rsvp.setEventURL(eventURL);
+            }
+
+            if(obj.has("member")){
+                JSONObject member = obj.getJSONObject("member");
+                String memId = member.optString("member_id");
+                String memName = member.optString("member_name");
+
+                rsvp.setMemId(memId);
+                rsvp.setMemName(memName);
+            }
+           
+            if(obj.has("group")){
+                JSONObject group = obj.getJSONObject("group");
+                String gCity = group.optString("group_city");
+                String gState = group.optString("group_state");
+                String gCountry = group.optString("group_country");
+                String gId = group.optString("group_id");
+                String gName = group.optString("group_name");
+                Double gLon = group.optDouble("group_lon");
+                Double gLat = group.optDouble("group_lat");
+                JSONArray groupTopics = group.optJSONArray("group_topics");
+                List<String> topics = new ArrayList<>();
+                for (int i = 0; i < groupTopics.length(); i++ ) {
+                    topics.add(groupTopics.getJSONObject(i).getString("topic_name")); 
+                }
+
+                rsvp.setGroupTopics(String.join(",",topics));
+                rsvp.setGroupCity(gCity);
+                rsvp.setGroupState(gState);
+                rsvp.setGroupCountry(gCountry);
+                rsvp.setGroupLat(gLat);
+                rsvp.setGroupLon(gLon);
+                rsvp.setGroupName(gName);
+                rsvp.setGroupId(gId);
+                }
+           
+            if(obj.has("venue")){
+                JSONObject venue = obj.getJSONObject("venue");
+                String venueName = venue.optString("venue_name");
+                Double venueLon = venue.optDouble("lon");
+                Double venueLat = venue.optDouble("lat");
+                String venueId = venue.optString("venue_id");
+
+                rsvp.setVenueName(venueName);
+                rsvp.setVenueId(venueId);
+                rsvp.setVenueLat(venueLat);
+                rsvp.setVenueLon(venueLon);
+                rsvp.setVenueId(venueId);
+            }
+
+            rsvp.setMtime(obj.optString("mtime"));
+            rsvp.setResponse(obj.optString("response"));
+            rsvp.setGuests(obj.optInt("guests"));
+            rsvp.setVisibility(obj.optString("visibility"));
+           return rsvp;
         }
     }
 
     public static class RSVP {
 
-        private int id;
-        private long dateTime;
+        private String id;
+        private String mtime;
+        private String response;
+        private int guests;
+        private String visibility;
+        private String venueName;
+        private double venueLon;
+        private double venueLat;
+        private String venueId;
+        private String eventName;
+        private String eventId;
+        private String eventTime;
+        private String eventURL;
+        private String memId;
+        private String memName;
+        private String groupTopics;
+        private String groupCity;
+        private String groupState;
+        private String groupCountry;
+        private String groupId;
+        private String groupName;
+        private double groupLon;
+        private double groupLat;
 
-        public RSVP(int id, long dateTime) {
+        public RSVP(String id) {
             this.id = id;
-            this.dateTime = dateTime;
         }
 
-        public long getDateTime() {
-            return dateTime;
+        public String getId(){
+            return this.id;
+        }
+        public String getMtime(){
+            return this.mtime;
+        }
+        public String getResponse(){
+            return this.response;
+        }
+        public int getGuests(){
+            return this.guests;
+        }
+        public String getVenueName(){
+            return this.venueName;
+        }
+        public double getVenueLon(){
+            return this.venueLon;
+        }
+        public double  getVenueLat() {
+            return this.venueLat;
+        }
+        public String  getVenueId(){
+            return this.venueId;
+        }
+        public String getEventName(){
+            return this.eventName;
+        }
+        public String getEventId(){
+            return this.eventId;
+        }
+        public String getEventTime(){
+            return this.eventTime;
+        }
+        public String  getEventURL(){
+            return this.eventURL;
+        }
+        public String getMemId(){
+            return this.memId;
+        }
+        public String getMemName(){
+            return this.memName;
+        }
+        public String getGroupTopics(){
+            return this.groupTopics;
+        }
+        public String getGroupCity(){
+            return this.groupCity;
+        }
+        public String  getGroupState(){
+            return this.groupState;
+        }
+        public String  getGroupId(){
+            return this.groupId;
+        }
+        public String  getGroupName(){
+            return this.groupName;
+        }
+        public double getGroupLon(){
+            return this.groupLon;
+        }
+        public double getGroupLat(){
+            return this.groupLat;
+        }
+        public void setId(String id) {
+            this.id = id;
         }
 
-        public int getId() {
-            return id;
+        public void setMtime(String mtime) {
+            this.mtime = Instant.ofEpochMilli(Long.parseLong(mtime)).toString();
         }
+
+        public void setResponse(String response) {
+            this.response = response;
+        }
+
+        public void setGuests(int guests) {
+            this.guests = guests;
+        }
+
+        public void setVenueName(String venueName) {
+            this.venueName = venueName;
+        }
+
+        public void setVenueLon(double venueLon) {
+            this.venueLon = venueLon;
+        }
+
+        public void setVenueLat(double venueLat) {
+            this.venueLat = venueLat;
+        }
+
+        public void setVenueId(String venueId) {
+            this.venueId = venueId;
+        }
+
+        public void setEventName(String eventName) {
+            this.eventName = eventName;
+        }
+
+        public void setEventId(String eventId) {
+            this.eventId = eventId;
+        }
+
+        public void setEventTime(String eventTime) {
+            this.eventTime = Instant.ofEpochMilli(Long.parseLong(eventTime)).toString();
+        }
+
+        public void setEventURL(String eventURL) {
+            this.eventURL = eventURL;
+        }
+
+        public void setMemId(String memId) {
+            this.memId = memId;
+        }
+
+        public void setMemName(String memName) {
+            this.memName = memName;
+        }
+
+        public void setGroupTopics(String groupTopics) {
+            this.groupTopics = groupTopics;
+        }
+
+        public void setGroupCity(String groupCity) {
+            this.groupCity = groupCity;
+        }
+
+        public void setGroupState(String groupState) {
+            this.groupState = groupState;
+        }
+
+        public void setGroupCountry(String groupCountry) {
+            this.groupCountry = groupCountry;
+        }
+
+        public void setGroupId(String groupId) {
+            this.groupId = groupId;
+        }
+
+        public void setGroupName(String groupName) {
+            this.groupName = groupName;
+        }
+
+        public void setGroupLon(double groupLon) {
+            this.groupLon = groupLon;
+        }
+
+        public void setGroupLat(double groupLat) {
+            this.groupLat = groupLat;
+        } 
+    
+        public String getVisibility() {
+            return visibility;
+        }
+    
+        public void setVisibility(String visibility) {
+            this.visibility = visibility;
+        }
+    
+        public String getGroupCountry() {
+            return groupCountry;
+        }
+
     }
 }
