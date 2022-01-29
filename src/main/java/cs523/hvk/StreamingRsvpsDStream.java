@@ -5,6 +5,9 @@ import java.time.Instant;
 import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
@@ -36,12 +39,12 @@ public class StreamingRsvpsDStream {
 
     private static final String APPLICATION_NAME = "Streaming Rsvps DStream";
     private static final String RUN_LOCAL_WITH_AVAILABLE_CORES = "local[*]";
-    private static final int BATCH_DURATION_INTERVAL_MS = 5000;
+    private static final int BATCH_DURATION_INTERVAL_MS = 60000;
 
     private static final Map<String, Object> KAFKA_CONSUMER_PROPERTIES;
 
     private static final String KAFKA_BROKERS = "10.211.55.2:29092";
-    private static final String KAFKA_OFFSET_RESET_TYPE = "latest";
+    private static final String KAFKA_OFFSET_RESET_TYPE = "earliest";
     private static final String KAFKA_GROUP = "meetupGroup";
     private static final String KAFKA_TOPIC = "meetupTopic";
 
@@ -125,6 +128,9 @@ public class StreamingRsvpsDStream {
             admin.createTable(table);
         }
 
+        // Configuration hadoopConfig = new Configuration();
+        // FileSystem hdfs = FileSystem.get(hadoopConfig);
+
         final JavaInputDStream<ConsumerRecord<String, String>> meetupStream =
                 KafkaUtils.createDirectStream(
                         streamingContext,
@@ -159,6 +165,15 @@ public class StreamingRsvpsDStream {
         streamingContext.start();
         streamingContext.awaitTermination();
     }
+
+    // private static void merge(FileSystem hdfs, Configuration hadoopConfig, String srcPath, String dstPath, String fileName) throws IllegalArgumentException, IOException {
+    //     Path destinationPath = new Path(dstPath);
+    //     System.out.println("####"+destinationPath);
+    //     if (!hdfs.exists(destinationPath)) {
+    //       hdfs.mkdirs(destinationPath);
+    //     }
+    //     FileUtil.copy(hdfs, new Path(srcPath), hdfs, new Path(dstPath + "/" + fileName), false, true, hadoopConfig);
+    //   }
 
     public static Put rSVPDataToPut(RSVP rsvp) {
         final Put put = new Put(Bytes.toBytes(rsvp.getId()));

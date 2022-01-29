@@ -38,15 +38,15 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.compress.Compression;
 
 public class AnalyzingRsvps {
-    // private static final byte[] COLUMN_FAMILY = null;
-    // private static final byte[] GROUP_TBL_CF = Bytes.toBytes("group");
+    private static final byte[] COLUMN_FAMILY = null;
+    private static final byte[] GROUP_TBL_CF = Bytes.toBytes("group");
 
-    // public static final String RSVPS_HIVE_TABLE = "rsvps_hive";
-    // public static final String ANALIZED_RSVPS_GROUP_TABLE = "analized_rsvps_group";
-    // public static final String EVENTS_SPREADING_TABLE = "events_spreading";
-    // private static final byte[] EVENTS_SP_CF = Bytes.toBytes("data");
-    // private static final byte[] G_STATE_COL = Bytes.toBytes("state");
-    // private static final byte[] EVENTS_NUM_COL = Bytes.toBytes("events_num");
+    public static final String RSVPS_HIVE_TABLE = "rsvps_hive";
+    public static final String ANALIZED_RSVPS_GROUP_TABLE = "analized_rsvps_group";
+    public static final String EVENTS_SPREADING_TABLE = "events_spreading";
+    private static final byte[] EVENTS_SP_CF = Bytes.toBytes("data");
+    private static final byte[] G_STATE_COL = Bytes.toBytes("state");
+    private static final byte[] EVENTS_NUM_COL = Bytes.toBytes("events_num");
 
     public static void main(String[] args) throws SQLException, IOException {
 
@@ -62,38 +62,19 @@ public class AnalyzingRsvps {
         "STORED AS textfile \n" +
         "LOCATION 'hdfs:///input';";
 
-        // Connection con = null;
-		// try {
-		// 	String conStr = "jdbc:hive2://localhost:10000/default";
-		// 	Class.forName("org.apache.hive.jdbc.HiveDriver");
-		// 	con = DriverManager.getConnection(conStr, "hdoop", "");
-		// 	Statement stmt = con.createStatement();
+        try (org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(HBaseConfiguration.create());
+            Admin admin = connection.getAdmin()) {
+            final ColumnFamilyDescriptor columnFamily = ColumnFamilyDescriptorBuilder.newBuilder(EVENTS_SP_CF)
+                    .setCompressionType(Compression.Algorithm.NONE).build();
+            final TableDescriptor table = TableDescriptorBuilder.newBuilder(TableName.valueOf(EVENTS_SPREADING_TABLE))
+                    .setColumnFamilies(Arrays.asList(columnFamily)).build();
 
-        
-        //     stmt.execute(hiveCreSta);
-		// } catch (Exception ex) {
-		// 	ex.printStackTrace();
-		// } finally {
-		// 	try {
-		// 		if (con != null)
-		// 			con.close();
-		// 	} catch (Exception ex) {
-		// 	}
-		// }
-
-        // try (org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(HBaseConfiguration.create());
-        //     Admin admin = connection.getAdmin()) {
-        //     final ColumnFamilyDescriptor columnFamily = ColumnFamilyDescriptorBuilder.newBuilder(EVENTS_SP_CF)
-        //             .setCompressionType(Compression.Algorithm.NONE).build();
-        //     final TableDescriptor table = TableDescriptorBuilder.newBuilder(TableName.valueOf(EVENTS_SPREADING_TABLE))
-        //             .setColumnFamilies(Arrays.asList(columnFamily)).build();
-
-        //     if (admin.tableExists(table.getTableName())) {
-        //         admin.disableTable(table.getTableName());
-        //         admin.deleteTable(table.getTableName());
-        //     }
-        //     admin.createTable(table);
-        // }
+            if (admin.tableExists(table.getTableName())) {
+                admin.disableTable(table.getTableName());
+                admin.deleteTable(table.getTableName());
+            }
+            admin.createTable(table);
+        }
 
         final SparkConf sparkConf = new SparkConf();
         sparkConf.setMaster("local[2]");
@@ -108,41 +89,31 @@ public class AnalyzingRsvps {
         final SparkSession sparkSession = SparkSession.builder()
                 .config(sparkConf)
                 .config("hive.metastore.uris", "thrift://localhost:9083")
-                .config("hive.server2.thrift.port", "10000")
-                .config("spark.sql.hive.thriftServer.singleSession", true)
                 .enableHiveSupport()
                 .getOrCreate();
 
-        // final SparkSession sparkHbaseSession = SparkSession.builder()
-        //         .config(sparkConf)
-        //         .getOrCreate();
+
 
         sparkSession.sql(hiveCreSta);
 
-        // final JobConf jobConf = new JobConf(HBaseConfiguration.create(), AnalyzingRsvps.class);
-        // jobConf.setOutputFormat(TableOutputFormat.class);
-        // jobConf.set(TableOutputFormat.OUTPUT_TABLE, EVENTS_SPREADING_TABLE);
+        final JobConf jobConf = new JobConf(HBaseConfiguration.create(), AnalyzingRsvps.class);
+        jobConf.setOutputFormat(TableOutputFormat.class);
+        jobConf.set(TableOutputFormat.OUTPUT_TABLE, EVENTS_SPREADING_TABLE);
 
         final String sql = "SELECT group_state, COUNT(*) as num_events FROM rsvps_hive WHERE group_country = 'us' GROUP BY group_state;";
 
-         sparkSession.sql(sql).javaRDD()
-            .mapToPair(r -> 
-                 new Tuple2<Text,NullWritable>( new Text(String.join("\t",Arrays.asList(r.getString(0),String.valueOf(r.getLong(1))))), NullWritable.get()))
-            .saveAsHadoopFile("/output", Text.class, NullWritable.class, TextOutputFormat.class);
-        // sparkSession.sql("create external table if not exists " +
-        //         "weather (d string, location string, min_temp double, max_temp double, rainfall double) \n" +
-        //         "row format delimited \n" +
-        //         "fields terminated by ',' \n" +
-        //         "stored as textfile \n" +
-        //         "location 'hdfs:///input'");    
+        sparkSession.sql(sql).javaRDD()
+        .mapToPair(r -> new Tuple2<>(new ImmutableBytesWritable(), eventsSpreadingToPut(r)))
+        .saveAsHadoopDataset(jobConf);
+
 
         sparkContext.close();
     }
 
-    // private static Put eventsSpreadingToPut(Row r) {
-    //     Put p = new Put(Bytes.toBytes(String.valueOf(Instant.now().toEpochMilli())));
-    //     p.addColumn(EVENTS_SP_CF, G_STATE_COL, Bytes.toBytes(r.getString(0)));
-    //     p.addColumn(EVENTS_SP_CF, EVENTS_NUM_COL, Bytes.toBytes(String.valueOf(r.getLong(1))));
-    //     return p;
-    // }
+    private static Put eventsSpreadingToPut(Row r) {
+        Put p = new Put(Bytes.toBytes(String.valueOf(Instant.now().toEpochMilli())));
+        p.addColumn(EVENTS_SP_CF, G_STATE_COL, Bytes.toBytes(r.getString(0)));
+        p.addColumn(EVENTS_SP_CF, EVENTS_NUM_COL, Bytes.toBytes(String.valueOf(r.getLong(1))));
+        return p;
+    }
 }
