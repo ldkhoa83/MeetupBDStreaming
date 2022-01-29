@@ -44,36 +44,36 @@
             <artifactId>hbase-client</artifactId>
             <version>2.4.8</version>
         </dependency>
-        <!-- <dependency>
+        <dependency>
             <groupId>org.apache.hbase</groupId>
             <artifactId>hbase-mapreduce</artifactId>
             <version>3.0.0-alpha-1</version>
-        </dependency> -->
+        </dependency>
         <!-- <dependency>
             <groupId>org.apache.hbase.connectors.spark</groupId>
             <artifactId>hbase-spark</artifactId>
             <version>1.0.0</version>
-        </dependency> -->
-        <!-- <dependency>
+        </dependency>  -->
+        <dependency>
             <groupId>commons-httpclient</groupId>
             <artifactId>commons-httpclient</artifactId>
             <version>3.1</version>
-        </dependency> -->
-        <dependency>
+        </dependency>
+        <!-- <dependency>
     <groupId>org.apache.hive</groupId>
     <artifactId>hive-hbase-handler</artifactId>
-    <version>3.1.2</version>
-    </dependency>
+    <version>2.3.9</version>
+    </dependency> -->
 <!-- <dependency>
     <groupId>org.apache.hbase</groupId>
     <artifactId>hbase-common</artifactId>
     <version>2.4.8</version>
 </dependency> -->
-<dependency>
+<!-- <dependency>
     <groupId>org.apache.hive</groupId>
     <artifactId>hive-metastore</artifactId>
     <version>3.1.2</version>
-</dependency>
+</dependency> -->
 <!-- <dependency>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-hive_2.12</artifactId>

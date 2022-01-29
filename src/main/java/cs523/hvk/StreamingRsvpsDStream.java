@@ -11,12 +11,16 @@ import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapred.TableOutputFormat;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.spark.SparkConf;
 import org.apache.spark.streaming.Duration;
+import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaInputDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
@@ -129,11 +133,17 @@ public class StreamingRsvpsDStream {
                 );
 
         JavaPairDStream<ImmutableBytesWritable, Put> data = meetupStream
-                .map(ConsumerRecord::value)
+                .map(c -> c.value())
                 .map(Parser::parse)
                 .filter(Objects::nonNull)
                 .mapToPair(d -> {
                     return new Tuple2<>(new ImmutableBytesWritable(), rSVPDataToPut(d));});
+        
+        JavaPairDStream<Text, NullWritable> textData = meetupStream
+                    .map(ConsumerRecord::value)
+                    .map(Parser::parse)
+                    .mapToPair(d -> {
+                        return new Tuple2<>(new Text(d.toString()),NullWritable.get());});
 
        JobConf jobConf = new JobConf(HBaseConfiguration.create(), StreamingRsvpsDStream.class);
        jobConf.setOutputFormat(TableOutputFormat.class);
@@ -141,6 +151,9 @@ public class StreamingRsvpsDStream {
 
         data.foreachRDD( r-> {
              r.saveAsHadoopDataset(jobConf);
+        });
+        textData.foreachRDD(r -> {
+            r.saveAsHadoopFile("/input", Text.class, NullWritable.class, TextOutputFormat.class);
         });
 
         streamingContext.start();
@@ -444,6 +457,14 @@ public class StreamingRsvpsDStream {
     
         public String getGroupCountry() {
             return groupCountry;
+        }
+
+        @Override
+        public String toString() {
+            List<String> texts = Arrays.asList(id,mtime,response,String.valueOf(guests),visibility,venueId,venueName,
+                            String.valueOf(venueLon),String.valueOf(venueLat),eventId,eventName,eventTime,eventURL,memId,
+                            memName,groupId,groupName,groupTopics,String.valueOf(groupLon),String.valueOf(groupLat),groupCity,groupState,groupCountry);
+            return String.join("\t", texts);
         }
 
     }
