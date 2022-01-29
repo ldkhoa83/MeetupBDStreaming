@@ -112,11 +112,14 @@ public class StreamingRsvpsDStream {
         final TableDescriptor table = TableDescriptorBuilder.newBuilder(TableName.valueOf(TABLE_NAME))
                 .setColumnFamilies(Arrays.asList(infoColumnFamily,venueColumnFamily,memberColumnFamily,eventColumnFamily,groupColumnFamily)).build();
 
-        if (admin.tableExists(table.getTableName())) {
-            admin.disableTable(table.getTableName());
-            admin.deleteTable(table.getTableName());
+        // if (admin.tableExists(table.getTableName())) {
+        //     admin.disableTable(table.getTableName());
+        //     admin.deleteTable(table.getTableName());
+        // }
+
+        if (!admin.tableExists(table.getTableName())) {
+            admin.createTable(table);
         }
-        admin.createTable(table);
 
         final JavaInputDStream<ConsumerRecord<String, String>> meetupStream =
                 KafkaUtils.createDirectStream(
