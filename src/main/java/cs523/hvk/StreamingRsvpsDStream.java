@@ -35,11 +35,11 @@ public class StreamingRsvpsDStream {
 
     private static final String APPLICATION_NAME = "Streaming Rsvps DStream";
     private static final String RUN_LOCAL_WITH_AVAILABLE_CORES = "local[*]";
-    private static final int BATCH_DURATION_INTERVAL_MS = 60000;
+    private static final int BATCH_DURATION_INTERVAL_MS = Integer.parseInt(AppProperties.get("spark.streaming.duration.interval"));
 
     private static final Map<String, Object> KAFKA_CONSUMER_PROPERTIES;
 
-    private static final String KAFKA_BROKERS = "10.211.55.2:29092";
+    private static final String KAFKA_BROKERS = AppProperties.get("kafka.brokers");
     private static final String KAFKA_OFFSET_RESET_TYPE = "earliest";
     private static final String KAFKA_GROUP = "meetupGroup";
     private static final String KAFKA_TOPIC = "meetupTopic";
@@ -99,9 +99,9 @@ public class StreamingRsvpsDStream {
     public static void main(String[] args) throws InterruptedException, IOException {
 
         Configuration config = HBaseConfiguration.create();
-        config.set("hbase.master","localhost:60000");
-        config.set("hbase.zookeeper.property.clientPort", "2181");
-        config.set("hbase.zookeeper.quorum", "localhost");
+        config.set("hbase.master",AppProperties.get("hbase.master.uri"));
+        config.set("hbase.zookeeper.property.clientPort", AppProperties.get("hbase.zookeeper.port"));
+        config.set("hbase.zookeeper.quorum", AppProperties.get("hbase.zookeeper.quorum"));
         Connection connection = ConnectionFactory.createConnection(config);
 
         final SparkConf conf = new SparkConf()

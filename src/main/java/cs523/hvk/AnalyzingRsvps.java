@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Map.Entry;
 
 import org.apache.directory.api.util.Strings;
@@ -83,7 +84,7 @@ public class AnalyzingRsvps {
 
         final SparkSession sparkSession = SparkSession.builder()
                 .config(sparkConf)
-                .config("hive.metastore.uris", "thrift://localhost:9083")
+                .config("hive.metastore.uris", AppProperties.get("hive.metastore.uris"))
                 .enableHiveSupport()
                 .getOrCreate();
 
@@ -98,20 +99,24 @@ public class AnalyzingRsvps {
         sparkSession.sql(sql).javaRDD()
         .mapToPair(r -> new Tuple2<>(r.getString(0), Arrays.asList(new Tuple2<>(r.getString(1),r.getLong(2)))))
         .reduceByKey((x,y) -> {List<Tuple2<String,Long>> r = new ArrayList<>();  r.addAll(x); r.addAll(y); return r;})
+        .filter(t -> t._2() != null)
         .mapToPair(t -> {
             Map<String,Long> topicMap = new HashMap<>();
             t._2().forEach(i -> {
-                for(String topicToken : i._1().split(",|\\s+")){
-                    topicToken = topicToken.trim();
-                    if(Strings.isNotEmpty(topicToken) && topicToken.matches("\\w+")){
-                        if(topicMap.containsKey(topicToken)){
-                            topicMap.put(topicToken, topicMap.get(topicToken) + i._2());
-                        }else {
-                            topicMap.put(topicToken, i._2());
+                if(i != null){
+                    for(String topicToken : i._1().split(",|\\s+")){
+                        topicToken = topicToken.trim();
+                        if(Strings.isNotEmpty(topicToken) && topicToken.matches("\\w+")){
+                            if(topicMap.containsKey(topicToken)){
+                                topicMap.put(topicToken, topicMap.get(topicToken) + i._2());
+                            }else {
+                                topicMap.put(topicToken, i._2());
+                            }
                         }
                     }
                 }
             }); 
+            if(topicMap.isEmpty()) return new Tuple2<>(new ImmutableBytesWritable(), toPut("", "", 0L));
             List<Entry<String, Long>> list = new ArrayList<>(topicMap.entrySet());
 		    list.sort(Entry.comparingByValue());
             Entry<String,Long> hotTopic = list.get(list.size()-1);

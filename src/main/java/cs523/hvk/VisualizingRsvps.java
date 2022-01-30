@@ -21,7 +21,7 @@ public class VisualizingRsvps {
 
         Connection con = null;
         try {
-            String conStr = "jdbc:hive2://localhost:10000/default";
+            String conStr = "jdbc:hive2://"+AppProperties.get("hive2.thrift.uri")+"/default";
             Class.forName("org.apache.hive.jdbc.HiveDriver");
             con = DriverManager.getConnection(conStr, "hdoop", "");
             Statement stmt = con.createStatement();
