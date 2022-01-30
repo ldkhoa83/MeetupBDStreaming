@@ -5,9 +5,6 @@ import java.time.Instant;
 import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FileUtil;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
@@ -23,7 +20,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.spark.SparkConf;
 import org.apache.spark.streaming.Duration;
-import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaInputDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
@@ -82,6 +78,11 @@ public class StreamingRsvpsDStream {
     private static final Collection<String> TOPICS =
                 Collections.unmodifiableList(Arrays.asList(KAFKA_TOPIC));
 
+    private static final byte[] CF_EVENT_SPREADING = Bytes.toBytes("data");
+    private static final String EVSP_TABLE_NAME = "realtime_event_spreading";
+    private static final byte[] G_STATE_COL = Bytes.toBytes("state");
+    private static final byte[] EVENTS_NUM_COL = Bytes.toBytes("events_num");
+
     static {
         Map<String, Object> kafkaProperties = new HashMap<>();
         kafkaProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA_BROKERS);
@@ -111,6 +112,7 @@ public class StreamingRsvpsDStream {
                 = new JavaStreamingContext(conf, new Duration(BATCH_DURATION_INTERVAL_MS));
 
         Admin admin = connection.getAdmin();
+
         final ColumnFamilyDescriptor infoColumnFamily = ColumnFamilyDescriptorBuilder.newBuilder(CF_BASIC_INFO).build();
         final ColumnFamilyDescriptor venueColumnFamily = ColumnFamilyDescriptorBuilder.newBuilder(CF_VENUE).build();
         final ColumnFamilyDescriptor memberColumnFamily = ColumnFamilyDescriptorBuilder.newBuilder(CF_MEMBER).build();
@@ -119,17 +121,17 @@ public class StreamingRsvpsDStream {
         final TableDescriptor table = TableDescriptorBuilder.newBuilder(TableName.valueOf(TABLE_NAME))
                 .setColumnFamilies(Arrays.asList(infoColumnFamily,venueColumnFamily,memberColumnFamily,eventColumnFamily,groupColumnFamily)).build();
 
-        // if (admin.tableExists(table.getTableName())) {
-        //     admin.disableTable(table.getTableName());
-        //     admin.deleteTable(table.getTableName());
-        // }
+        final ColumnFamilyDescriptor evspColF = ColumnFamilyDescriptorBuilder.newBuilder(CF_EVENT_SPREADING).build();
+        final TableDescriptor eventSpreadingTable = TableDescriptorBuilder.newBuilder(TableName.valueOf(EVSP_TABLE_NAME))
+                .setColumnFamilies(Arrays.asList(evspColF)).build();
+
 
         if (!admin.tableExists(table.getTableName())) {
             admin.createTable(table);
         }
-
-        // Configuration hadoopConfig = new Configuration();
-        // FileSystem hdfs = FileSystem.get(hadoopConfig);
+        if(!admin.tableExists(eventSpreadingTable.getTableName())){
+            admin.createTable(eventSpreadingTable);
+        }
 
         final JavaInputDStream<ConsumerRecord<String, String>> meetupStream =
                 KafkaUtils.createDirectStream(
@@ -145,18 +147,34 @@ public class StreamingRsvpsDStream {
                 .mapToPair(d -> {
                     return new Tuple2<>(new ImmutableBytesWritable(), rSVPDataToPut(d));});
         
+        JavaPairDStream<ImmutableBytesWritable,Put> events_spreading = meetupStream
+                .map(ConsumerRecord::value)
+                .map(Parser::parse)
+                .filter(Objects::nonNull)
+                .filter(r -> r.getGroupCountry().equals("us") && !r.getGroupState().trim().isEmpty())
+                .mapToPair(r -> new Tuple2<>(r.getGroupState(), 1))
+                .reduceByKey((x,y) -> x + y)
+                .mapToPair(r -> new Tuple2<>(new ImmutableBytesWritable(), toPutForEventSpreading(r._1(),r._2())));
+        
         JavaPairDStream<Text, NullWritable> textData = meetupStream
                     .map(ConsumerRecord::value)
                     .map(Parser::parse)
                     .mapToPair(d -> {
                         return new Tuple2<>(new Text(d.toString()),NullWritable.get());});
 
-       JobConf jobConf = new JobConf(HBaseConfiguration.create(), StreamingRsvpsDStream.class);
-       jobConf.setOutputFormat(TableOutputFormat.class);
-       jobConf.set(TableOutputFormat.OUTPUT_TABLE, TABLE_NAME);
+       JobConf jobEVSPConf = new JobConf(HBaseConfiguration.create(), StreamingRsvpsDStream.class);
+       jobEVSPConf.setOutputFormat(TableOutputFormat.class);
+       jobEVSPConf.set(TableOutputFormat.OUTPUT_TABLE, EVSP_TABLE_NAME);
+
+       JobConf jobAllDataConf = new JobConf(HBaseConfiguration.create(), StreamingRsvpsDStream.class);
+       jobAllDataConf.setOutputFormat(TableOutputFormat.class);
+       jobAllDataConf.set(TableOutputFormat.OUTPUT_TABLE, TABLE_NAME);
 
         data.foreachRDD( r-> {
-             r.saveAsHadoopDataset(jobConf);
+             r.saveAsHadoopDataset(jobAllDataConf);
+        });
+        events_spreading.foreachRDD(r -> {
+            r.saveAsHadoopDataset(jobEVSPConf);
         });
         textData.foreachRDD(r -> {
             r.saveAsHadoopFile("/input", Text.class, NullWritable.class, TextOutputFormat.class);
@@ -166,14 +184,14 @@ public class StreamingRsvpsDStream {
         streamingContext.awaitTermination();
     }
 
-    // private static void merge(FileSystem hdfs, Configuration hadoopConfig, String srcPath, String dstPath, String fileName) throws IllegalArgumentException, IOException {
-    //     Path destinationPath = new Path(dstPath);
-    //     System.out.println("####"+destinationPath);
-    //     if (!hdfs.exists(destinationPath)) {
-    //       hdfs.mkdirs(destinationPath);
-    //     }
-    //     FileUtil.copy(hdfs, new Path(srcPath), hdfs, new Path(dstPath + "/" + fileName), false, true, hadoopConfig);
-    //   }
+
+    private static Put toPutForEventSpreading(String state, Integer event_num) {
+        Put p = new Put(Bytes.toBytes(String.valueOf(Instant.now().toEpochMilli())));
+        p.addColumn(CF_EVENT_SPREADING, G_STATE_COL, Bytes.toBytes(state));
+        p.addColumn(CF_EVENT_SPREADING, EVENTS_NUM_COL, Bytes.toBytes(String.valueOf(event_num)));
+        return p;
+    }
+
 
     public static Put rSVPDataToPut(RSVP rsvp) {
         final Put put = new Put(Bytes.toBytes(rsvp.getId()));
