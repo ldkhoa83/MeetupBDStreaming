@@ -80,8 +80,9 @@ public class StreamingRsvpsDStream {
 
     private static final byte[] CF_EVENT_SPREADING = Bytes.toBytes("data");
     private static final String EVSP_TABLE_NAME = "realtime_event_spreading";
-    private static final byte[] G_STATE_COL = Bytes.toBytes("state");
     private static final byte[] EVENTS_NUM_COL = Bytes.toBytes("events_num");
+    private static final byte[] EVENT_LON_COL = Bytes.toBytes("event_lon");
+    private static final byte[] EVENT_LAT_COL = Bytes.toBytes("event_lat");
 
     static {
         Map<String, Object> kafkaProperties = new HashMap<>();
@@ -151,8 +152,8 @@ public class StreamingRsvpsDStream {
                 .map(ConsumerRecord::value)
                 .map(Parser::parse)
                 .filter(Objects::nonNull)
-                .filter(r -> r.getGroupCountry().equals("us") && !r.getGroupState().trim().isEmpty())
-                .mapToPair(r -> new Tuple2<>(r.getGroupState(), 1))
+                .filter(r -> r.getGroupCountry().equals("us") && r.getVenueId() != null)
+                .mapToPair(r -> new Tuple2<>(String.valueOf(r.getVenueLon())+","+String.valueOf(r.getVenueLat()), 1))
                 .reduceByKey((x,y) -> x + y)
                 .mapToPair(r -> new Tuple2<>(new ImmutableBytesWritable(), toPutForEventSpreading(r._1(),r._2())));
         
@@ -185,9 +186,11 @@ public class StreamingRsvpsDStream {
     }
 
 
-    private static Put toPutForEventSpreading(String state, Integer event_num) {
+    private static Put toPutForEventSpreading(String eventGeo, Integer event_num) {
         Put p = new Put(Bytes.toBytes(String.valueOf(Instant.now().toEpochMilli())));
-        p.addColumn(CF_EVENT_SPREADING, G_STATE_COL, Bytes.toBytes(state));
+        String[] eventGeoTokens = eventGeo.split(",");
+        p.addColumn(CF_EVENT_SPREADING, EVENT_LON_COL, Bytes.toBytes(String.valueOf(eventGeoTokens[0])));
+        p.addColumn(CF_EVENT_SPREADING, EVENT_LAT_COL, Bytes.toBytes(String.valueOf(eventGeoTokens[1])));
         p.addColumn(CF_EVENT_SPREADING, EVENTS_NUM_COL, Bytes.toBytes(String.valueOf(event_num)));
         return p;
     }

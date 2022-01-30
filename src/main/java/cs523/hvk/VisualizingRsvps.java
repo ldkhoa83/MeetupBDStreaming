@@ -8,9 +8,9 @@ public class VisualizingRsvps {
 
     public static void main(String[] args) {
         String eventSpreading = "create external table if not exists " +
-        "events_spreading_rsvps_hive (rowkey string, state string, events_num string) \n" +
+        "events_spreading_rsvps (rowkey string, event_lon double, event_lat double, events_num int) \n" +
         "STORED BY 'org.apache.hadoop.hive.hbase.HBaseStorageHandler' \n" +
-        "WITH SERDEPROPERTIES ('hbase.columns.mapping' = ':key,data:state,data:events_num') \n"+
+        "WITH SERDEPROPERTIES ('hbase.columns.mapping' = ':key,data:event_lon,data:event_lat,data:events_num') \n"+
         "TBLPROPERTIES('hbase.table.name' = 'realtime_event_spreading')";
 
         String hotTopic = "create external table if not exists " +
