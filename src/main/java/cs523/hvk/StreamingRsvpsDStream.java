@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
 
+import org.apache.directory.api.util.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
@@ -177,9 +178,8 @@ public class StreamingRsvpsDStream {
         events_spreading.foreachRDD(r -> {
             r.saveAsHadoopDataset(jobEVSPConf);
         });
-        textData.foreachRDD(r -> {
-            r.saveAsHadoopFile("/input", Text.class, NullWritable.class, TextOutputFormat.class);
-        });
+
+        textData.saveAsHadoopFiles("rsvps", "", Text.class, NullWritable.class, TextOutputFormat.class);
 
         streamingContext.start();
         streamingContext.awaitTermination();
@@ -302,6 +302,7 @@ public class StreamingRsvpsDStream {
         }
     }
 
+
     public static class RSVP {
 
         private String id;
@@ -400,7 +401,7 @@ public class StreamingRsvpsDStream {
         }
 
         public void setMtime(String mtime) {
-            this.mtime = Instant.ofEpochMilli(Long.parseLong(mtime)).toString();
+            this.mtime = Strings.isNotEmpty(mtime) ? Instant.ofEpochMilli(Long.parseLong(mtime)).toString() : "";
         }
 
         public void setResponse(String response) {
@@ -436,7 +437,7 @@ public class StreamingRsvpsDStream {
         }
 
         public void setEventTime(String eventTime) {
-            this.eventTime = Instant.ofEpochMilli(Long.parseLong(eventTime)).toString();
+            this.eventTime = Strings.isNotEmpty(eventTime) ? Instant.ofEpochMilli(Long.parseLong(eventTime)).toString() : "";
         }
 
         public void setEventURL(String eventURL) {

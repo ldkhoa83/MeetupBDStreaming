@@ -8,7 +8,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Map.Entry;
 
 import org.apache.directory.api.util.Strings;
@@ -56,7 +55,7 @@ public class AnalyzingRsvps {
         "row format delimited \n" +
         "fields terminated by '\t' \n" +
         "STORED AS textfile \n" +
-        "LOCATION 'hdfs:///input';";
+        "LOCATION 'hdfs:///user/hdoop';";
 
         try (org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(HBaseConfiguration.create());
             Admin admin = connection.getAdmin()) {
@@ -85,6 +84,7 @@ public class AnalyzingRsvps {
         final SparkSession sparkSession = SparkSession.builder()
                 .config(sparkConf)
                 .config("hive.metastore.uris", AppProperties.get("hive.metastore.uris"))
+                .config("mapreduce.input.fileinputformat.input.dir.recursive","true")
                 .enableHiveSupport()
                 .getOrCreate();
 
@@ -103,10 +103,10 @@ public class AnalyzingRsvps {
         .mapToPair(t -> {
             Map<String,Long> topicMap = new HashMap<>();
             t._2().forEach(i -> {
-                if(i != null){
+                if(i != null && i._1() != null){
                     for(String topicToken : i._1().split(",|\\s+")){
                         topicToken = topicToken.trim();
-                        if(Strings.isNotEmpty(topicToken) && topicToken.matches("\\w+")){
+                        if(Strings.isNotEmpty(topicToken) && topicToken.matches("\\w+") && !"and".equals(topicToken.toLowerCase())){
                             if(topicMap.containsKey(topicToken)){
                                 topicMap.put(topicToken, topicMap.get(topicToken) + i._2());
                             }else {
